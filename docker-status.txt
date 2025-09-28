@@ -1,0 +1,12 @@
+CONTAINER ID   IMAGE              COMMAND                  CREATED          STATUS          PORTS                    NAMES
+845006bd0974   devops1-service1   "python app.py"          10 minutes ago   Up 10 minutes   0.0.0.0:8199->8199/tcp   service1
+848083da275d   devops1-service2   "docker-entrypoint.s…"   10 minutes ago   Up 10 minutes   0.0.0.0:8300->8300/tcp   service2
+94e43c5530c8   devops1-storage    "/storageapp"            10 minutes ago   Up 10 minutes   0.0.0.0:8200->8200/tcp   storage
+NETWORK ID     NAME                DRIVER    SCOPE
+bb71e3dcbc27   backend-1_backend   bridge    local
+b471567209d8   backend-1_default   bridge    local
+fe40876e6fa0   bridge              bridge    local
+e7451525d4e0   devops1_appnet      bridge    local
+6d82ae8ff2bc   devops1_compnet     bridge    local
+8f3604121b04   host                host      local
+7ee2757bd82a   none                null      local

@@ -1,0 +1,44 @@
+version: "3.8"
+
+services:
+  service1:
+    build: ./service1
+    container_name: service1
+    ports:
+      - "8199:8199"
+    networks:
+      - appnet
+    volumes:
+      - ./vstorage:/vstorage
+    depends_on:
+      - service2
+      - storage
+
+  service2:
+    build: ./service2
+    container_name: service2
+    ports:
+      - "8300:8300"
+    networks:
+      - appnet
+    volumes:
+      - ./vstorage:/vstorage
+    depends_on:
+      - storage
+
+  storage:
+    build: ./storage
+    container_name: storage
+    ports:
+      - "8200:8200"
+    networks:
+      - appnet
+    volumes:
+      - storage_data:/data
+
+networks:
+  appnet:
+    driver: bridge
+
+volumes:
+  storage_data:
