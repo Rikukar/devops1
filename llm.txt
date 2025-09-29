@@ -1,0 +1,16 @@
+Used LLM tool: 
+OpenAI ChatGPT
+
+Motivation / reason to use LLM:
+Problem solving and code adjustments
+
+How and why LLM helped:
+Assisted in writing small code comments and explanations.
+Helped me fix mistakes.
+
+What kind of mistakes LLM did:
+Misunderstood my questions or requests.
+Repeated itself.
+
+What were things that LLM was not able to provide:
+Nothing comes to mind.
