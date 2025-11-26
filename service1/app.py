@@ -3,21 +3,20 @@ import datetime, shutil, requests
 
 app = Flask(__name__)
 
-import os
-STORAGE_URL = os.getenv("STORAGE_URL", "http://storage:8200/log")
-SERVICE2_URL = os.getenv("SERVICE2_URL", "http://service2_v1:8300/status")
+STORAGE_URL = "http://storage:8200/log"
+SERVICE2_URL = "http://service2:8300/status"
 VSTORAGE_PATH = "/vstorage"
 
 # Get current UTC timestamp in ISO 8601 format
 def iso_utc_now():
     return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
-# Calculate container uptime in minutes
-def uptime_minutes():
+# Calculate container uptime in hours
+def uptime_hours():
     try:
         with open('/proc/uptime','r') as f:
             seconds = float(f.readline().split()[0])
-            return round(seconds / 60.0, 2)
+            return round(seconds / 3600.0, 2)
     except Exception:
         return 0
 
@@ -29,9 +28,9 @@ def free_root_mb():
 # Build a status record string with timestamp, uptime and free disk
 def make_record(prefix="Timestamp1"):
     ts = iso_utc_now()
-    up = uptime_minutes()
+    up = uptime_hours()
     free = free_root_mb()
-    return f"{ts}: uptime {up} minutes, free disk in root: {free} MBytes"
+    return f"{ts}: uptime {up} hours, free disk in root: {free} MBytes"
 
 # Append a record to the vStorage file
 def append_vstorage(record):
