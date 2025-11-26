@@ -54,35 +54,56 @@ app.post('/api/reset-log',auth, async (req,res)=>{
 });
 
 // stub endpoints for future blue-green logic
-import { exec } from 'child_process';
+import http from 'http';
+
+const ACTIVE_CONF_PATH = '/etc/nginx/conf.d/active.conf';
 
 function activeIsV1(){
-  try { return fs.readFileSync('/shared/active.conf','utf8').includes('service1_v1'); } catch { return true; }
+  try { return fs.readFileSync(ACTIVE_CONF_PATH,'utf8').includes('service1_v1'); } catch { return true; }
 }
 
 function writeActive(v){
-  fs.writeFileSync('/shared/active.conf',`upstream app_active { server service1_${v}:8199; }\n`);
+  fs.writeFileSync(ACTIVE_CONF_PATH,`upstream app_active { server service1_${v}:8199; }\n`);
 }
 
-function restartGateway(cb){
-  exec('docker restart gateway', (e)=> cb(e));
-}
-
-app.post('/api/switch',auth,(req,res)=>{
-  const target = activeIsV1() ? 'v2' : 'v1';
-  try { writeActive(target); } catch(e){ return res.status(500).json({error:'write failed'}); }
-  restartGateway(err=>{
-    if(err) return res.status(500).json({error:'restart failed'});
-    res.json({active: target});
+function dockerRequest(method, path){
+  return new Promise((resolve,reject)=>{
+    const req = http.request({socketPath:'/var/run/docker.sock', path, method}, res => {
+      res.on('data',()=>{});
+      res.on('end',()=>{
+        if(res.statusCode && res.statusCode >=200 && res.statusCode<300) resolve(); else reject(new Error('Docker API '+method+' '+path+' status '+res.statusCode));
+      });
+    });
+    req.on('error',reject);
+    req.end();
   });
+}
+
+async function restartGateway(){
+  await dockerRequest('POST', '/containers/gateway/restart');
+}
+
+app.post('/api/switch',auth, async (req,res)=>{
+  const target = activeIsV1() ? 'v2' : 'v1';
+  try {
+    writeActive(target);
+    await restartGateway();
+    res.json({active: target});
+  } catch(e){
+    res.status(500).json({error: e.message});
+  }
 });
 
-app.post('/api/discard',auth,(req,res)=>{
+app.post('/api/discard',auth, async (req,res)=>{
   const inactive = activeIsV1() ? ['service1_v2','service2_v2'] : ['service1_v1','service2_v1'];
-  exec(`docker rm -f ${inactive.join(' ')}`, (err)=>{
-    if(err) return res.status(500).json({error:'discard failed'});
+  try {
+    for(const c of inactive){
+      await dockerRequest('DELETE', `/containers/${c}?force=true`);
+    }
     res.json({discarded: inactive});
-  });
+  } catch(e){
+    res.status(500).json({error: e.message});
+  }
 });
 
 app.get('/api/log',auth, async (req,res)=>{
