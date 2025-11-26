@@ -12,12 +12,12 @@ function isoUTCNow() {
   return new Date().toISOString().replace(/\.\d+Z$/, 'Z');
 }
 
-// Calculate container uptime in hours
-function uptimeHours() {
+// Calculate container uptime in minutes
+function uptimeMinutes() {
   try {
     const data = fs.readFileSync('/proc/uptime', 'utf8');
     const seconds = parseFloat(data.split(' ')[0]);
-    return Math.round((seconds / 3600) * 100) / 100;
+    return Math.round((seconds / 60) * 100) / 100;
   } catch (e) {
     return 0;
   }
@@ -37,7 +37,7 @@ function freeRootMB() {
 
 // Build the record
 function makeRecord() {
-  return `${isoUTCNow()}: uptime ${uptimeHours()} hours, free disk in root: ${freeRootMB()} MBytes`;
+  return `${isoUTCNow()}: uptime ${uptimeMinutes()} minutes, free disk in root: ${freeRootMB()} MBytes`;
 }
 
 // Append record to vStorage log file
