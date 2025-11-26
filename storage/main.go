@@ -60,6 +60,21 @@ func getLogHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
+// Reset (truncate) the log file
+func resetLogHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "use POST", http.StatusMethodNotAllowed)
+		return
+	}
+	f, err := os.OpenFile(logPath, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	f.Close()
+	w.WriteHeader(204)
+}
+
 func main() {
 	ensureDataPath()
 	http.HandleFunc("/log", func(w http.ResponseWriter, r *http.Request) {
@@ -71,6 +86,7 @@ func main() {
 			http.Error(w, "only /log GET/POST supported", http.StatusMethodNotAllowed)
 		}
 	})
+	http.HandleFunc("/log/reset", resetLogHandler)
 	log.Println("storage listening on :8200, log file:", logPath)
 	log.Fatal(http.ListenAndServe(":8200", nil))
 }

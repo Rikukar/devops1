@@ -1,0 +1,148 @@
+stages:
+  - build
+  - test
+  - package
+  - smoke
+  - deliver
+  - deploy
+
+variables:
+  REGISTRY: "$HARBOR_REGISTRY"
+  PROJECT_NAME: "devops1"
+  # Dynamic version: branch name if matches project1.*, else dev
+  VERSION: "$CI_COMMIT_REF_NAME"
+  DOCKER_TLS_CERTDIR: ""  # disable TLS in dind for simplicity
+  TARGET_USER: "ubuntu"
+  TARGET_HOST: "86.50.21.221"  # fixed deploy IP
+  TARGET_SSH_PORT: "22"
+  TARGET_DIR: "/home/$TARGET_USER/deploy/devops1"
+
+.default_job: &default_job
+  image: docker:25.0.3
+  services:
+    - docker:25.0.3-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_DRIVER: overlay2
+  before_script:
+    - echo "Logging in to registry" 
+    - echo "$HARBOR_PASS" | docker login -u "$HARBOR_USER" --password-stdin "$REGISTRY"
+    - |
+      if [[ "$VERSION" != project1.0 && "$VERSION" != project1.1 ]]; then 
+        export VERSION=dev; echo "Using fallback VERSION=dev"; 
+      fi
+  after_script:
+    - echo "Job cleanup: pruning local images" 
+    - docker images | grep "$PROJECT_NAME" || true
+    - docker image prune -f || true
+    - docker builder prune -f || true
+
+build_services:
+  stage: build
+  <<: *default_job
+  script:
+    - docker build -t $REGISTRY/$PROJECT_NAME/service1:$VERSION service1
+    - docker build -t $REGISTRY/$PROJECT_NAME/service2:$VERSION service2
+    - docker build -t $REGISTRY/$PROJECT_NAME/storage:$VERSION storage
+    - docker build -t $REGISTRY/$PROJECT_NAME/gateway:$VERSION gateway
+    - docker build -t $REGISTRY/$PROJECT_NAME/console:$VERSION console
+  artifacts:
+    paths:
+      - vstorage
+    expire_in: 1h
+
+# Simple test: run service1 + dependencies, curl status
+unit_tests:
+  stage: test
+  <<: *default_job
+  script:
+    - docker compose up -d storage service2 service1 gateway
+    - sleep 6
+    - docker ps
+    - curl -u admin:adminpass -s http://gateway:8199/status || (echo "status failed" && exit 1)
+    - curl -u admin:adminpass -s http://gateway:8199/log || (echo "log failed" && exit 1)
+    - docker compose down
+
+package_images:
+  stage: package
+  <<: *default_job
+  script:
+    - docker push $REGISTRY/$PROJECT_NAME/service1:$VERSION
+    - docker push $REGISTRY/$PROJECT_NAME/service2:$VERSION
+    - docker push $REGISTRY/$PROJECT_NAME/storage:$VERSION
+    - docker push $REGISTRY/$PROJECT_NAME/gateway:$VERSION
+    - docker push $REGISTRY/$PROJECT_NAME/console:$VERSION
+
+smoke_test:
+  stage: smoke
+  <<: *default_job
+  script:
+    - docker compose up -d
+    - for i in $(seq 1 15); do curl -u admin:adminpass -fsS http://gateway:8199/status && break || sleep 2; done || (echo "gateway not ready" && exit 1)
+    - curl -u admin:adminpass -s http://gateway:8199/log | head -n 2 || (echo "smoke log failed" && exit 1)
+    - docker compose down
+
+# deliver overlaps with package; keep for explicit stage separation
+deliver:
+  stage: deliver
+  <<: *default_job
+  script:
+    - echo "Images already pushed in package stage"
+
+# Deploy to VM: requires SSH vars (SSH_HOST, SSH_USER, SSH_KEY_B64)
+deploy:
+  stage: deploy
+  image: alpine:latest
+  needs: [build_services]
+  before_script:
+    - apk add --no-cache openssh-client curl bash tar
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" | base64 -d > ~/.ssh/id_key
+    - chmod 600 ~/.ssh/id_key
+    - ssh-keyscan -p "$TARGET_SSH_PORT" -H "$TARGET_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+  script:
+    - tar -czf project.tar.gz . --exclude .git --exclude project.tar.gz
+    - scp -P "$TARGET_SSH_PORT" -i ~/.ssh/id_key -o StrictHostKeyChecking=no project.tar.gz "$TARGET_USER@$TARGET_HOST:/tmp/project.tar.gz"
+    - |
+      ssh -p "$TARGET_SSH_PORT" -i ~/.ssh/id_key -o StrictHostKeyChecking=no "$TARGET_USER@$TARGET_HOST" "TARGET_DIR='$TARGET_DIR' VERSION='$VERSION' REGISTRY='$REGISTRY' PROJECT_NAME='$PROJECT_NAME' HARBOR_USER='$HARBOR_USER' HARBOR_PASS='$HARBOR_PASS' bash -s" <<'EOF'
+      set -euo pipefail
+      # Install curl if missing
+      if ! command -v curl >/dev/null 2>&1; then sudo apt-get update -y && sudo apt-get install -y curl; fi
+      # Install docker if missing
+      if ! command -v docker >/dev/null 2>&1; then curl -fsSL https://get.docker.com | sh; sudo usermod -aG docker "$USER" || true; fi
+      # Install compose plugin if missing
+      if ! docker compose version >/dev/null 2>&1; then COMPOSE_VERSION="v2.27.0"; mkdir -p ~/.docker/cli-plugins; curl -SL "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o ~/.docker/cli-plugins/docker-compose; chmod +x ~/.docker/cli-plugins/docker-compose; fi
+      mkdir -p "$TARGET_DIR"
+      tar -xzf /tmp/project.tar.gz -C "$TARGET_DIR"
+      cd "$TARGET_DIR"
+      sudo docker compose down || true
+      # Build fresh images locally (for branch version tag)
+      sudo docker build -t $REGISTRY/$PROJECT_NAME/service1:$VERSION service1
+      sudo docker build -t $REGISTRY/$PROJECT_NAME/service2:$VERSION service2
+      sudo docker build -t $REGISTRY/$PROJECT_NAME/storage:$VERSION storage
+      sudo docker build -t $REGISTRY/$PROJECT_NAME/gateway:$VERSION gateway
+      sudo docker build -t $REGISTRY/$PROJECT_NAME/console:$VERSION console
+      sudo docker compose up -d
+      # Readiness check via gateway basic auth
+      for i in $(seq 1 30); do curl -u admin:adminpass -fsS http://localhost:8199/status && break || sleep 2; done
+      curl -u admin:adminpass -fsS http://localhost:8199/log >/dev/null 2>&1 || { echo 'Log endpoint failed' >&2; exit 1; }
+      echo 'Deployment complete'
+      EOF
+  after_script:
+    - echo "Deploy cleanup on runner"
+    - rm -f project.tar.gz || true
+  only:
+    - project1.0
+    - project1.1
+
+# Global cleanup job (extra safeguard)
+after_cleanup:
+  stage: deliver
+  <<: *default_job
+  script:
+    - echo "Final cleanup"
+    - docker rmi $(docker images --filter=reference="$REGISTRY/$PROJECT_NAME/*" -q) || true
+  when: always
+
+# Variables to define in GitLab UI (Masked, Protected):
+# HARBOR_USER, HARBOR_PASS, HARBOR_REGISTRY, SSH_HOST, SSH_USER, SSH_KEY_B64

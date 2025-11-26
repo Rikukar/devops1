@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Management Console</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 1rem; }
+#login, #app { max-width: 600px; }
+.hidden { display: none; }
+pre { background:#f4f4f4; padding:.5rem; white-space:pre-wrap; }
+button { margin:.25rem 0; }
+.grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+.card { border:1px solid #ccc; padding:.5rem; border-radius:4px; }
+</style>
+</head>
+<body>
+<div id="login">
+  <h2>Login</h2>
+  <input id="user" placeholder="Username" /> <br />
+  <input id="pass" type="password" placeholder="Password" /> <br />
+  <button onclick="login()">LOGIN</button>
+  <div id="loginError" style="color:red"></div>
+</div>
+<div id="app" class="hidden">
+  <h2>Console</h2>
+  <div style="margin-bottom:.5rem;">
+    <button onclick="logout()">LOGOUT</button>
+    <button id="switchBtn" onclick="switchVersion()">SWITCH VERSION</button>
+    <button id="discardBtn" onclick="discardOld()">DISCARD OLD</button>
+    <button onclick="resetLog()">RESET LOG</button>
+  </div>
+  <div id="activeBanner" style="font-weight:bold; margin-bottom:.5rem;">Active: v1</div>
+  <div class="grid">
+    <div class="card">
+      <h3>Metrics</h3>
+      <table style="width:100%; font-size:.85rem;" id="metricsTable">
+        <thead><tr><th>Item</th><th>Value</th></tr></thead>
+        <tbody id="metricsBody"></tbody>
+      </table>
+      <h4>Raw</h4>
+      <pre id="metricsRaw" style="max-height:140px; overflow:auto;"></pre>
+    </div>
+    <div class="card">
+      <h3>Log (tail)</h3>
+      <pre id="log"></pre>
+    </div>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

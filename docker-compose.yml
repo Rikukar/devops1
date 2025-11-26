@@ -1,24 +1,47 @@
 version: "3.8"
 
 services:
-  service1:
+  service1_v1:
     build: ./service1
-    container_name: service1
-    ports:
-      - "8199:8199"
+    container_name: service1_v1
+    environment:
+      - SERVICE2_URL=http://service2_v1:8300/status
+      - STORAGE_URL=http://storage:8200/log
     networks:
       - appnet
     volumes:
       - ./vstorage:/vstorage
     depends_on:
-      - service2
+      - service2_v1
       - storage
 
-  service2:
+  service2_v1:
     build: ./service2
-    container_name: service2
-    ports:
-      - "8300:8300"
+    container_name: service2_v1
+    networks:
+      - appnet
+    volumes:
+      - ./vstorage:/vstorage
+    depends_on:
+      - storage
+
+  service1_v2:
+    build: ./service1
+    container_name: service1_v2
+    environment:
+      - SERVICE2_URL=http://service2_v2:8300/status
+      - STORAGE_URL=http://storage:8200/log
+    networks:
+      - appnet
+    volumes:
+      - ./vstorage:/vstorage
+    depends_on:
+      - service2_v2
+      - storage
+
+  service2_v2:
+    build: ./service2
+    container_name: service2_v2
     networks:
       - appnet
     volumes:
@@ -35,6 +58,38 @@ services:
       - appnet
     volumes:
       - storage_data:/data
+
+  console:
+    build: ./console
+    container_name: console
+    ports:
+      - "8198:8198"
+    networks:
+      - appnet
+    environment:
+      - CONSOLE_USER=admin
+      - CONSOLE_PASS=adminpass
+      - STORAGE_URL=http://storage:8200
+      - SERVICE1_V1_URL=http://service1_v1:8199/status
+      - SERVICE1_V2_URL=http://service1_v2:8199/status
+    volumes:
+      - ./vstorage:/vstorage
+      - ./gateway/active.conf:/shared/active.conf
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - service1_v1
+      - service2_v1
+      - storage
+
+  gateway:
+    build: ./gateway
+    container_name: gateway
+    ports:
+      - "8199:8199"
+    networks:
+      - appnet
+    depends_on:
+      - service1_v1
 
 networks:
   appnet:
