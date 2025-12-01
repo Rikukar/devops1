@@ -85,11 +85,13 @@ services:
     build: ./gateway
     container_name: gateway
     ports:
-      - "8199:8199"
+      - "80:80"
+      - "443:443"
     networks:
       - appnet
     volumes:
       - ./gateway/active.conf:/etc/nginx/conf.d/active.conf
+      - ./vstorage/certs:/etc/nginx/certs:ro
     depends_on:
       - service1_v1
 

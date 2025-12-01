@@ -4,4 +4,6 @@ COPY nginx.conf /etc/nginx/nginx.conf
 COPY htpasswd /etc/nginx/htpasswd
 # initial active upstream file (will be bind-mounted in runtime for switching)
 COPY active.conf /etc/nginx/conf.d/active.conf
-EXPOSE 8199
+# create certs directory for mounting TLS certs
+RUN mkdir -p /etc/nginx/certs
+EXPOSE 80 443
